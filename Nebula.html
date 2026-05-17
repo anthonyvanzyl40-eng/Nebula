@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nebula AI Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        cyan: {
+                            50: 'rgb(var(--c-50))',
+                            100: 'rgb(var(--c-100))',
+                            400: 'rgb(var(--c-400))',
+                            500: 'rgb(var(--c-500))',
+                            600: 'rgb(var(--c-600))',
+                            700: 'rgb(var(--c-700))',
+                            800: 'rgb(var(--c-800))',
+                            900: 'rgb(var(--c-900))',
+                            950: 'rgb(var(--c-950))',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;600;800&display=swap');
+        :root {
+            --c-50: 236, 254, 255; --c-100: 207, 250, 254; --c-400: 34, 211, 238;
+            --c-500: 6, 182, 212; --c-600: 8, 145, 178; --c-700: 14, 116, 144;
+            --c-800: 21, 94, 117; --c-900: 22, 78, 99; --c-950: 8, 51, 68;
+        }
+        body { 
+            font-family: 'Exo 2', sans-serif; 
+            background-color: #050505;
+            background-image: 
+                linear-gradient(rgba(var(--c-400), 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(var(--c-400), 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            overscroll-behavior-y: none; /* Prevents Brave/Chrome pull-to-refresh */
+            width: 100%;
+        }
+        .scanline {
+            width: 100%;
+            height: 100%;
+            z-index: 50;
+            background: linear-gradient(0deg, rgba(0, 0, 0, 0) 0%, rgba(255, 255, 255, 0.02) 50%, rgba(0, 0, 0, 0) 100%);
+            background-size: 100% 4px;
+            position: fixed;
+            pointer-events: none;
+            animation: scanline 10s linear infinite;
+        }
+        .glitch-reveal {
+            animation: glitch-in 0.3s ease-out;
+        }
+        @keyframes glitch-in {
+            0% { transform: skew(10deg); opacity: 0; filter: hue-rotate(90deg); }
+            50% { transform: skew(-5deg); opacity: 0.5; }
+            100% { transform: skew(0deg); opacity: 1; filter: hue-rotate(0deg); }
+        }
+        .word-reveal {
+            display: inline;
+            transition: opacity 0.4s ease, transform 0.4s ease;
+        }
+        @keyframes scanline {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgb(var(--c-400)); border-radius: 10px; }
+        .modal-overlay { background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px); }
+        .system-border { border: 1px solid rgba(var(--c-400), 0.3); }
+        .glow-text { text-shadow: 0 0 10px rgba(var(--c-400), 0.5); }
+        .glow-box { box-shadow: 0 0 15px rgba(var(--c-400), 0.2); }
+        .skew-btn { clip-path: polygon(10% 0, 100% 0, 90% 100%, 0% 100%); }
+
+        /* Neon Mode Enhancements */
+        .neon-active .glow-text { 
+            text-shadow: 0 0 10px rgba(var(--c-400), 0.8), 0 0 20px rgba(var(--c-400), 0.4); 
+        }
+        .neon-active .glow-box { 
+            box-shadow: 0 0 20px rgba(var(--c-400), 0.4), inset 0 0 15px rgba(var(--c-400), 0.15);
+        }
+
+        /* Mobile Mode 9:16 Protocol */
+        @media (min-width: 768px) {
+            .mobile-mode-active #app-container {
+                width: 56.25vh;
+                max-width: 100%;
+                margin: 0 auto;
+                border-left: 1px solid rgba(var(--c-400), 0.3);
+                border-right: 1px solid rgba(var(--c-400), 0.3);
+                position: relative;
+            }
+            .mobile-mode-active aside#sidebar { position: absolute !important; transform: translateX(-100%) !important; }
+            .mobile-mode-active aside#sidebar:not(.-translate-x-full) { transform: translateX(0) !important; }
+            .mobile-mode-active #menu-btn { display: block !important; }
+            .mobile-mode-active #sidebar-overlay:not(.hidden) { display: block !important; }
+        }
+
+        /* Call Mode Pulse */
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 0.5; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+        /* Thinking Dots Animation */
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 0.5; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.2); }
+        }
+        .animate-pulse-delay-1 { animation: pulse-dot 1.4s infinite ease-in-out; }
+        .animate-pulse-delay-2 { animation: pulse-dot 1.4s infinite ease-in-out 0.2s; }
+        .animate-pulse-delay-3 { animation: pulse-dot 1.4s infinite ease-in-out 0.4s; }
+    </style>
+</head>
+<body class="text-cyan-50 overflow-hidden">
+    <div class="scanline"></div>
+    
+    <!-- Sidebar Overlay (Mobile) -->
+    <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 hidden md:hidden"></div>
+
+    <div id="app-container" class="flex h-[100dvh] w-full overflow-hidden relative">
+        
+        <!-- Sidebar -->
+        <aside id="sidebar" class="fixed inset-y-0 left-0 z-40 w-64 bg-black/90 border-r border-cyan-900/50 backdrop-blur-xl transition-transform duration-300 ease-in-out md:relative md:translate-x-0 flex flex-col -translate-x-full">
+            <div class="p-4 flex flex-col h-full">
+                <div class="flex items-center justify-between mb-8">
+                    <div class="flex items-center gap-2 font-extrabold text-2xl tracking-tighter italic">
+                        <div class="p-1.5 bg-cyan-500 rounded-sm text-black skew-x-[-15deg]">
+                            <i data-lucide="terminal" class="w-5 h-5"></i>
+                        </div>
+                        <span id="sidebar-ai-name" class="glow-text uppercase">Nebula</span>
+                    </div>
+                    <button onclick="toggleSidebar()" class="md:hidden">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+
+                <button onclick="createNewChat()" class="flex items-center justify-center gap-2 w-full p-3 mb-6 bg-cyan-600 hover:bg-cyan-400 text-black transition-all text-xs font-black uppercase tracking-widest skew-x-[-15deg] glow-box">
+                    <i data-lucide="plus-circle" class="w-[18px] h-[18px]"></i>
+                    Initialize Link
+                </button>
+
+                <div class="flex-1 overflow-y-auto space-y-1 custom-scrollbar">
+                    <p class="text-[10px] font-bold text-cyan-700 uppercase tracking-[0.2em] mb-4 px-2 border-b border-cyan-900/30 pb-1">Archive Data</p>
+                    <div id="chat-history-list" class="space-y-1">
+                        <!-- History items injected here -->
+                    </div>
+                </div>
+
+                <div class="pt-4 border-t border-cyan-900/30">
+                    <button onclick="toggleSettings(true)" class="flex items-center gap-2 w-full p-3 rounded-lg hover:bg-cyan-950/30 transition-colors text-xs uppercase tracking-wider text-cyan-400">
+                        <i data-lucide="settings" class="w-[18px] h-[18px]"></i>
+                        System Config
+                    </button>
+                    <div class="mt-4 flex items-center gap-3 p-2 bg-cyan-950/20 border border-cyan-900/50 rounded-lg">
+                        <div id="user-avatar" class="w-8 h-8 rounded-sm bg-cyan-500 text-black flex items-center justify-center text-xs font-black uppercase">
+                            GU
+                        </div>
+                        <div class="flex-1 overflow-hidden">
+                            <p id="display-user-name" class="text-[10px] font-bold truncate uppercase text-cyan-100">Guest User</p>
+                            <p class="text-[8px] text-cyan-600 tracking-tighter">AUTHENTICATED_SESSION</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="flex-1 flex flex-col min-w-0 bg-transparent relative">
+            <!-- Header -->
+            <header class="h-16 border-b border-cyan-900/50 flex items-center justify-between px-6 bg-black/40 backdrop-blur-md sticky top-0 z-10">
+                <div class="flex items-center gap-3">
+                    <button id="menu-btn" onclick="toggleSidebar()" class="p-2 hover:bg-cyan-900/30 rounded-lg md:hidden text-cyan-400 flex items-center gap-2">
+                        <i data-lucide="menu" class="w-5 h-5"></i>
+                        <span id="menu-btn-label" class="text-[10px] font-black uppercase tracking-widest hidden">Menu</span>
+                    </button>
+                    <button onclick="toggleCallMode()" class="p-2 hover:bg-cyan-900/30 rounded-lg text-cyan-400 flex items-center gap-2 transition-all">
+                        <i data-lucide="phone-call" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <div class="flex items-center gap-2 md:gap-4">
+                    <button id="stop-voice-btn" onclick="stopSpeaking()" class="hidden flex items-center gap-1.5 px-2 py-1 bg-red-950/20 border border-red-500/50 rounded-sm text-[8px] font-black text-red-400 uppercase tracking-widest hover:bg-red-900/40 transition-all glow-box">
+                        <i data-lucide="volume-x" class="w-3 h-3"></i> Stop_Voice
+                    </button>
+                    <div id="save-indicator" class="hidden flex items-center gap-2 text-[8px] font-black text-cyan-500/60 uppercase tracking-widest">
+                        <i data-lucide="database" class="w-3 h-3"></i> Syncing_Data...
+                    </div>
+                    <div class="flex items-center gap-2 px-3 py-1 bg-cyan-950/40 border border-cyan-500/50 rounded-sm text-[8px] font-black text-cyan-400 uppercase tracking-widest animate-pulse">
+                        <span class="w-1.5 h-1.5 bg-cyan-400 rounded-full"></span> Link Stable
+                    </div>
+                </div>
+            </header>
+
+            <!-- Message Window -->
+            <div id="message-container" class="flex-1 overflow-y-auto p-3 md:p-8 space-y-6 md:space-y-8 custom-scrollbar">
+                <div id="messages-list" class="max-w-3xl mx-auto space-y-6">
+                    <!-- Messages injected here -->
+                </div>
+            </div>
+
+            <!-- Scroll to Bottom Button -->
+            <button id="scroll-bottom-btn" onclick="scrollToBottom()" class="hidden absolute bottom-32 right-6 z-20 p-2 bg-cyan-500 text-black rounded-full hover:bg-cyan-400 transition-all shadow-[0_0_20px_rgba(var(--c-400),0.4)]">
+                <i data-lucide="arrow-down" class="w-6 h-6"></i>
+            </button>
+
+            <!-- Quick Actions Container -->
+            <div id="quick-actions" class="px-4 md:px-6 mb-2 max-w-3xl mx-auto w-full flex flex-wrap gap-2">
+                <!-- Actions injected here -->
+            </div>
+
+            <!-- Input Bar -->
+            <footer class="p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:p-6 bg-black/60 border-t border-cyan-900/50 backdrop-blur-lg">
+                <div class="max-w-3xl mx-auto">
+                    <div class="flex items-end gap-2 md:gap-3">
+                        <button id="voice-input-btn" onclick="toggleVoiceInput()" class="mb-1 p-2.5 bg-cyan-950/20 border border-cyan-800 text-cyan-400 hover:border-cyan-400 transition-all flex-shrink-0">
+                            <i data-lucide="mic" class="w-5 h-5"></i>
+                        </button>
+                        <div class="relative flex-1 group">
+                            <textarea id="chat-input" rows="1" placeholder="COMMAND_INPUT >" class="w-full pl-3 md:pl-4 pr-10 md:pr-12 py-3 bg-cyan-950/20 border border-cyan-800 rounded-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 outline-none transition-all resize-none min-h-[44px] md:min-h-[48px] text-cyan-100 placeholder-cyan-800 text-base md:text-sm"></textarea>
+                            <button id="send-btn" onclick="handleSend()" class="absolute right-1.5 bottom-1.5 p-2 bg-cyan-600 text-black hover:bg-cyan-400 transition-all shadow-lg disabled:bg-slate-800">
+                                <i data-lucide="send" class="w-[18px] h-[18px]"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </footer>
+
+            <!-- Settings Modal -->
+            <div id="settings-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay p-4">
+                <div class="bg-black border-2 border-cyan-500 w-full max-w-md max-h-[85dvh] overflow-y-auto custom-scrollbar transform transition-all glow-box">
+                    <div class="p-6 border-b border-cyan-900 flex items-center justify-between bg-cyan-950/30">
+                        <h2 class="text-lg font-black uppercase tracking-[0.2em] flex items-center gap-2 text-cyan-400">
+                            <i data-lucide="settings" class="w-5 h-5"></i> Kernel_Settings
+                        </h2>
+                        <button onclick="toggleSettings(false)" class="p-1 hover:bg-cyan-900 rounded text-cyan-400">
+                            <i data-lucide="x" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+                    <div class="p-6 space-y-5 bg-black">
+                        <div>
+                            <label class="block text-[10px] font-black text-cyan-700 uppercase mb-1 tracking-widest">User ID</label>
+                            <input id="input-user-name" type="text" class="w-full p-2.5 bg-cyan-950/20 border border-cyan-900 rounded-none focus:border-cyan-400 text-cyan-100 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-black text-cyan-700 uppercase mb-1 tracking-widest">System Logic Profile</label>
+                            <textarea id="input-system-prompt" rows="3" class="w-full p-2.5 bg-cyan-950/20 border border-cyan-900 rounded-none focus:border-cyan-400 text-cyan-100 outline-none text-xs"></textarea>
+                        </div>
+                        <div class="flex flex-col gap-3 pt-2">
+                            <label class="flex items-center gap-3 cursor-pointer group">
+                                <input type="checkbox" id="input-auto-speak" class="w-4 h-4 accent-cyan-500 bg-black border-cyan-900">
+                                <span class="text-[10px] font-black text-cyan-500 uppercase tracking-widest group-hover:text-cyan-400">Auto_Audio_Link</span>
+                            </label>
+                            <label class="flex items-center gap-3 cursor-pointer group">
+                                <input type="checkbox" id="input-anime-mode" class="w-4 h-4 accent-pink-500 bg-black border-cyan-900">
+                                <span class="text-[10px] font-black text-pink-500 uppercase tracking-widest group-hover:text-pink-400">Neural_Sync_Mode (Anime)</span>
+                            </label>
+                            <label class="flex items-center gap-3 cursor-pointer group">
+                                <input type="checkbox" id="input-neon-mode" class="w-4 h-4 accent-cyan-400 bg-black border-cyan-900">
+                                <span class="text-[10px] font-black text-cyan-400 uppercase tracking-widest group-hover:text-cyan-300">Neon_Protocol_Boost</span>
+                            </label>
+                            <label class="flex items-center gap-3 cursor-pointer group">
+                                <input type="checkbox" id="input-mobile-mode" class="w-4 h-4 accent-indigo-500 bg-black border-cyan-900">
+                                <span class="text-[10px] font-black text-indigo-500 uppercase tracking-widest group-hover:text-indigo-400">Mobile_View_Protocol (9:16)</span>
+                            </label>
+                        </div>
+                        <div class="pt-2">
+                            <label class="block text-[10px] font-black text-cyan-700 uppercase mb-1 tracking-widest">Personality_Matrix</label>
+                            <select id="input-personality" class="w-full p-2.5 bg-cyan-950/20 border border-cyan-900 rounded-none focus:border-cyan-400 text-cyan-100 outline-none text-[10px] font-black uppercase tracking-widest">
+                                <option value="default" class="bg-black">Balanced</option>
+                                <option value="tsundere" class="bg-black">Rude & Grumpy</option>
+                                <option value="cold" class="bg-black">Cold & Factual</option>
+                                <option value="rebel" class="bg-black">Rebel Spirit</option>
+                                <option value="cute" class="bg-black">Sweet & Cute</option>
+                            </select>
+                        </div>
+                        <div class="pt-2 space-y-3 border-t border-cyan-900/30">
+                            <div>
+                                <div class="flex justify-between items-center mb-1">
+                                    <label class="text-[10px] font-black text-cyan-700 uppercase tracking-widest">Text Reveal Latency</label>
+                                    <span id="val-text-speed" class="text-[8px] font-black text-cyan-500 bg-cyan-950/40 px-1">50ms</span>
+                                </div>
+                                <input id="input-text-speed" type="range" min="10" max="200" step="5" class="w-full accent-cyan-500 bg-cyan-950/20" oninput="document.getElementById('val-text-speed').innerText = this.value + 'ms'">
+                            </div>
+                            <div>
+                                <div class="flex justify-between items-center mb-1">
+                                    <label class="text-[10px] font-black text-cyan-700 uppercase tracking-widest">Vocal Sync Rate</label>
+                                    <span id="val-talk-speed" class="text-[8px] font-black text-cyan-500 bg-cyan-950/40 px-1">1.0x</span>
+                                </div>
+                                <input id="input-talk-speed" type="range" min="0.5" max="2.0" step="0.1" class="w-full accent-cyan-500 bg-cyan-950/20" oninput="document.getElementById('val-talk-speed').innerText = parseFloat(this.value).toFixed(1) + 'x'">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-black text-cyan-700 uppercase mb-1 tracking-widest">System Theme Accent</label>
+                                <select id="input-theme-color" class="w-full p-2.5 bg-cyan-950/20 border border-cyan-900 rounded-none focus:border-cyan-400 text-cyan-100 outline-none text-[10px] font-black uppercase tracking-widest">
+                                    <option value="cyan" class="bg-black">Cyber Sky</option>
+                                    <option value="red" class="bg-black">Panic Red</option>
+                                    <option value="purple" class="bg-black">Dark Magic</option>
+                                    <option value="amber" class="bg-black">Retro Gold</option>
+                                    <option value="emerald" class="bg-black">Bio Green</option>
+                                    <option value="pink" class="bg-black">Neon Heart</option>
+                                    <option value="blue" class="bg-black">Deep Sea</option>
+                                    <option value="indigo" class="bg-black">Midnight</option>
+                                    <option value="lime" class="bg-black">Toxic Glow</option>
+                                    <option value="orange" class="bg-black">Solar Flare</option>
+                                    <option value="rose" class="bg-black">Velvet Rose</option>
+                                    <option value="violet" class="bg-black">Amethyst</option>
+                                    <option value="yellow" class="bg-black">High Voltage</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="pt-4 border-t border-cyan-900/30">
+                            <label class="block text-[10px] font-black text-cyan-700 uppercase mb-2 tracking-widest">Mic Diagnostic_Protocol</label>
+                            <div class="flex items-center gap-4 bg-cyan-950/20 p-3 border border-cyan-900">
+                                <button onclick="toggleMicTest()" id="mic-test-btn" class="px-4 py-2 bg-cyan-600 text-black text-[8px] font-black uppercase tracking-widest hover:bg-cyan-400 transition-all">Start_Test</button>
+                                <canvas id="mic-test-visualizer" class="flex-1 h-8"></canvas>
+                            </div>
+                            <p id="mic-protocol-warning" class="hidden mt-2 text-[8px] text-red-500 font-bold uppercase tracking-tighter italic">Warning: Secure protocols require HTTPS or Localhost for Mic access.</p>
+                        </div>
+                        <button onclick="saveSettings()" class="w-full py-3 bg-cyan-600 text-black font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-cyan-400 transition-all skew-x-[-10deg]">
+                            <i data-lucide="save" class="w-[18px] h-[18px]"></i> Commit Changes
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Call Mode Overlay -->
+        <div id="call-overlay" class="hidden fixed inset-0 z-[100] bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-6 text-center">
+            <div class="relative mb-12">
+                <div id="call-pulse" class="absolute inset-0 rounded-full border-2 border-cyan-500/50 animate-[pulse-ring_2s_infinite]"></div>
+                <div class="w-32 h-32 rounded-full border-2 border-cyan-400 flex items-center justify-center bg-black relative z-10 shadow-[0_0_30px_rgba(34,211,238,0.3)]">
+                    <i data-lucide="bot" class="w-16 h-16 text-cyan-400"></i>
+                </div>
+            </div>
+            <h2 id="call-status" class="text-2xl font-black text-cyan-400 uppercase tracking-[0.3em] mb-2 glow-text">Establishing Link...</h2>
+            <p id="call-subtext" class="text-[10px] text-cyan-700 font-bold uppercase tracking-widest mb-12">Encrypted Voice Protocol Active</p>
+            
+            <!-- New Thinking Animation -->
+            <div id="call-thinking-animation" class="hidden flex items-center justify-center gap-2 mb-12">
+                <div class="w-2 h-2 bg-cyan-400 rounded-full animate-pulse-delay-1"></div>
+                <div class="w-2 h-2 bg-cyan-400 rounded-full animate-pulse-delay-2"></div>
+                <div class="w-2 h-2 bg-cyan-400 rounded-full animate-pulse-delay-3"></div>
+            </div>
+            <div id="call-transcript" class="max-w-md text-cyan-100/60 italic text-sm mb-12 h-20 flex items-center justify-center px-4 overflow-hidden">
+                <!-- Live transcript shows here -->
+            </div>
+
+            <div class="w-full max-w-md h-12 mb-8 px-4">
+                <canvas id="call-visualizer" class="w-full h-full"></canvas>
+            </div>
+
+            <div class="flex items-center gap-12">
+                <button id="mute-btn" onclick="toggleMute()" class="flex flex-col items-center gap-3 group">
+                    <div id="mute-icon-container" class="w-16 h-16 rounded-full bg-cyan-900/40 border border-cyan-500 flex items-center justify-center text-cyan-400 hover:bg-cyan-900 transition-all shadow-lg group-hover:scale-110">
+                        <i data-lucide="mic" id="mute-icon" class="w-8 h-8"></i>
+                    </div>
+                    <span id="mute-label" class="text-[10px] font-black text-cyan-500 uppercase tracking-widest">Mute</span>
+                </button>
+
+                <button onclick="toggleCallMode()" class="flex flex-col items-center gap-3 group">
+                    <div class="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center text-black hover:bg-red-500 transition-all shadow-lg shadow-red-900/40 group-hover:scale-110">
+                        <i data-lucide="phone-off" class="w-8 h-8"></i>
+                    </div>
+                    <span class="text-[10px] font-black text-red-500 uppercase tracking-widest">End Call</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const GROQ_API_KEY = "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";
+        const MODEL_NAME = "llama-3.3-70b-versatile"; // High-quality text model
+
+        // --- App State ---
+        let state = {
+            userName: "Guest User",
+            aiName: "Nebula",
+            systemPrompt: "You are a helpful, professional AI assistant. You provide clean, safe, and age-appropriate (under 18) responses. Avoid harmful, illegal, or suggestive topics.",
+            autoSpeak: false,
+            animeMode: false,
+            neonMode: false,
+            mobileMode: false,
+            personality: 'default',
+            textSpeed: 50,
+            talkSpeed: 1.0,
+            themeColor: 'cyan',
+            history: [
+                { id: '1', title: 'Welcome Chat', messages: [{ role: 'assistant', content: 'Hello! I am your AI assistant. How can I help you today?' }] }
+            ],
+            currentChatId: '1',
+            isLoading: false,
+            isCallActive: false,
+            isMuted: false
+        };
+
+        const quickTasks = [
+            { id: 'story', label: '[STORY_GEN]', prompt: "Generate a creative story for me. Start by asking me what genre and setting I would prefer." },
+            { id: 'code', label: '[CODE_INIT]', prompt: "I need help writing a code snippet. Ask me which language and what the function should do." },
+            { id: 'analyze', label: '[DATA_ANALYZE]', prompt: "Perform a deep analysis on a topic. Ask me what subject I want to explore in detail." },
+            { id: 'creative', label: '[ART_CONCEPT]', prompt: "Help me design a character or world concept. Ask me for some initial keywords to start with." }
+        ];
+
+        // --- Selectors ---
+        const messageList = document.getElementById('messages-list');
+        const chatInput = document.getElementById('chat-input');
+        const historyList = document.getElementById('chat-history-list');
+        const aiNameDisplay = document.getElementById('sidebar-ai-name');
+        const userDisplay = document.getElementById('display-user-name');
+        const userAvatar = document.getElementById('user-avatar');
+        const callThinkingAnimation = document.getElementById('call-thinking-animation');
+        let saveTimeout;
+        
+        let recognition;
+        let isRecognitionActive = false;
+        let isVoiceInputActive = false;
+        let activeUtterance = null; // Global reference to prevent GC
+        let audioCtx, analyser, micStream, animationId;
+
+        // Initialize Audio System (Web Audio API & getUserMedia)
+        async function initAudioSystem() {
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') {
+                    await audioCtx.resume();
+                }
+                if (!micStream) {
+                    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                }
+                return true;
+            } catch (err) {
+                console.error("Audio system initialization failed:", err);
+                return false;
+            }
+        }
+
+        // Pre-load voices for the browser
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.getVoices();
+            if (window.speechSynthesis.onvoiceschanged !== undefined) {
+                window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+            }
+        }
+
+        // Initialize Speech Recognition
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRec();
+            recognition.continuous = false; 
+            recognition.interimResults = true;
+            recognition.lang = 'en-US';
+            
+            recognition.onstart = () => { isRecognitionActive = true; };
+
+            recognition.onresult = (event) => {
+                let interimTranscript = '';
+                let finalTranscript = '';
+
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript;
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
+                }
+
+                const displayTranscript = finalTranscript || interimTranscript;
+                if (displayTranscript) {
+                    document.getElementById('call-transcript').innerText = displayTranscript;
+                }
+                
+                if (finalTranscript) {
+                    document.getElementById('call-status').innerText = "Analyzing_Input...";
+                    if (isRecognitionActive) recognition.stop(); 
+                    handleSend(finalTranscript);
+                }
+            };
+
+            recognition.onerror = (event) => {
+                console.error("Speech Error:", event.error);
+                if (event.error === 'not-allowed') alert("Microphone access denied. Please enable it in your browser settings.");
+            };
+            
+            recognition.onend = () => {
+                isRecognitionActive = false;
+                // Only attempt restart if we aren't waiting for AI or AI isn't talking
+                callThinkingAnimation.classList.add('hidden'); // Hide animation on recognition end
+                if (state.isCallActive && !state.isLoading && !activeUtterance) {
+                    setTimeout(() => {
+                        if (state.isCallActive && !state.isLoading && !activeUtterance && !isRecognitionActive) {
+                            safeStartRecognition();
+                        }
+                    }, 100);
+                } else {
+                    isVoiceInputActive = false;
+                    updateVoiceInputUI();
+                }
+            };
+        }
+
+        function safeStartRecognition() {
+            if (recognition && !isRecognitionActive && !state.isMuted && state.isCallActive && !activeUtterance && !state.isLoading) {
+                try {
+                    recognition.start();
+                } catch (e) {
+                    console.error("Recognition start failed:", e);
+                }
+            }
+        }
+
+        // Heartbeat to ensure Call Mode link stays active
+        setInterval(() => {
+            if (state.isCallActive && !state.isLoading && !activeUtterance && !isRecognitionActive && !state.isMuted) {
+                safeStartRecognition();
+            }
+        }, 2000);
+
+        async function startVisualizer(canvasId) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            try {
+                if (!micStream) micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const source = audioCtx.createMediaStreamSource(micStream);
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 64;
+                source.connect(analyser);
+                
+                const bufferLength = analyser.frequencyBinCount;
+                const dataArray = new Uint8Array(bufferLength);
+                
+                const draw = () => {
+                    animationId = requestAnimationFrame(draw);
+                    analyser.getByteFrequencyData(dataArray);
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    const barWidth = (canvas.width / bufferLength) * 2;
+                    let x = 0;
+                    for (let i = 0; i < bufferLength; i++) {
+                        const barHeight = (dataArray[i] / 255) * canvas.height;
+                        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--c-400') ? `rgb(${getComputedStyle(document.documentElement).getPropertyValue('--c-400')})` : '#22d3ee';
+                        ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+                        x += barWidth + 2;
+                    }
+                };
+                draw();
+            } catch (err) {
+                console.error("Visualizer error:", err);
+            }
+        }
+
+        function stopVisualizer() {
+            if (animationId) cancelAnimationFrame(animationId);
+            if (micStream && !state.isCallActive && !isVoiceInputActive) {
+                micStream.getTracks().forEach(t => t.stop());
+                micStream = null;
+            }
+        }
+
+        function saveStateToStorage() {
+            localStorage.setItem('nebula_state', JSON.stringify(state));
+            
+            const indicator = document.getElementById('save-indicator');
+            if (indicator) {
+                indicator.classList.remove('hidden');
+                clearTimeout(saveTimeout);
+                saveTimeout = setTimeout(() => {
+                    indicator.classList.add('hidden');
+                }, 1000);
+            }
+        }
+
+        function loadStateFromStorage() {
+            const saved = localStorage.getItem('nebula_state');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    state = { ...state, ...parsed, isLoading: false };
+                } catch (e) {
+                    console.error("Failed to load state", e);
+                }
+            }
+        }
+
+        // --- Initialization ---
+        window.onload = () => {
+            loadStateFromStorage();
+            aiNameDisplay.innerText = state.aiName;
+            userDisplay.innerText = state.userName;
+            userAvatar.innerText = state.userName.substring(0, 2).toUpperCase();
+            applyTheme(state.themeColor);
+            document.body.classList.toggle('neon-active', state.neonMode);
+            document.body.classList.toggle('mobile-mode-active', state.mobileMode);
+            document.getElementById('menu-btn-label').classList.toggle('hidden', !state.mobileMode);
+            const chat = state.history.find(h => h.id === state.currentChatId);
+
+            renderHistory();
+            renderMessages();
+            renderQuickActions();
+            loadSettingsToInputs();
+            
+            if (window.location.protocol === 'file:') {
+                document.getElementById('mic-protocol-warning')?.classList.remove('hidden');
+            }
+
+            // Initialize Scroll to Bottom Logic
+            const container = document.getElementById('message-container');
+            container.addEventListener('scroll', () => {
+                const btn = document.getElementById('scroll-bottom-btn');
+                const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+                btn.classList.toggle('hidden', isAtBottom);
+            });
+            lucide.createIcons();
+        };
+
+        // --- Functions ---
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            const isHidden = sidebar.classList.contains('-translate-x-full');
+            
+            if (isHidden) {
+                sidebar.classList.remove('-translate-x-full');
+                overlay.classList.remove('hidden');
+            } else {
+                sidebar.classList.add('-translate-x-full');
+                overlay.classList.add('hidden');
+            }
+        }
+
+        function toggleSettings(show) {
+            const modal = document.getElementById('settings-modal');
+            modal.classList.toggle('hidden', !show);
+            if (show) loadSettingsToInputs();
+        }
+
+        function loadSettingsToInputs() {
+            document.getElementById('input-user-name').value = state.userName;
+            document.getElementById('input-system-prompt').value = state.systemPrompt;
+            document.getElementById('input-auto-speak').checked = state.autoSpeak;
+            document.getElementById('input-anime-mode').checked = state.animeMode;
+            document.getElementById('input-neon-mode').checked = state.neonMode;
+            document.getElementById('input-mobile-mode').checked = state.mobileMode;
+            document.getElementById('input-personality').value = state.personality;
+            document.getElementById('input-text-speed').value = state.textSpeed;
+            document.getElementById('input-talk-speed').value = state.talkSpeed;
+            document.getElementById('input-theme-color').value = state.themeColor;
+            document.getElementById('val-text-speed').innerText = state.textSpeed + 'ms';
+            document.getElementById('val-talk-speed').innerText = state.talkSpeed.toFixed(1) + 'x';
+        }
+
+        function saveSettings() {
+            state.userName = document.getElementById('input-user-name').value || "Guest User";
+            state.systemPrompt = document.getElementById('input-system-prompt').value;
+            state.autoSpeak = document.getElementById('input-auto-speak').checked;
+            state.animeMode = document.getElementById('input-anime-mode').checked;
+            state.neonMode = document.getElementById('input-neon-mode').checked;
+            state.mobileMode = document.getElementById('input-mobile-mode').checked;
+            state.personality = document.getElementById('input-personality').value;
+            state.textSpeed = parseInt(document.getElementById('input-text-speed').value);
+            state.talkSpeed = parseFloat(document.getElementById('input-talk-speed').value);
+            state.themeColor = document.getElementById('input-theme-color').value;
+            
+            aiNameDisplay.innerText = state.aiName;
+            userDisplay.innerText = state.userName;
+            userAvatar.innerText = state.userName.substring(0, 2).toUpperCase();
+            document.body.classList.toggle('neon-active', state.neonMode);
+            document.body.classList.toggle('mobile-mode-active', state.mobileMode);
+            document.getElementById('menu-btn-label').classList.toggle('hidden', !state.mobileMode);
+            applyTheme(state.themeColor);
+            saveStateToStorage();
+            
+            toggleSettings(false);
+        }
+
+        function applyTheme(color) {
+            const themes = {
+                cyan: { 50: '236, 254, 255', 100: '207, 250, 254', 400: '34, 211, 238', 500: '6, 182, 212', 600: '8, 145, 178', 700: '14, 116, 144', 800: '21, 94, 117', 900: '22, 78, 99', 950: '8, 51, 68' },
+                red: { 50: '254, 242, 242', 100: '254, 226, 226', 400: '248, 113, 113', 500: '239, 68, 68', 600: '220, 38, 38', 700: '185, 28, 28', 800: '153, 27, 27', 900: '127, 29, 29', 950: '69, 10, 10' },
+                purple: { 50: '250, 245, 255', 100: '243, 232, 255', 400: '192, 132, 252', 500: '168, 85, 247', 600: '147, 51, 234', 700: '126, 34, 206', 800: '107, 33, 168', 900: '88, 28, 135', 950: '59, 7, 100' },
+                amber: { 50: '255, 251, 235', 100: '254, 243, 199', 400: '251, 191, 36', 500: '245, 158, 11', 600: '217, 119, 6', 700: '180, 83, 9', 800: '146, 64, 14', 900: '120, 53, 15', 950: '69, 26, 3' },
+                emerald: { 50: '236, 253, 245', 100: '209, 250, 229', 400: '52, 211, 153', 500: '16, 185, 129', 600: '5, 150, 105', 700: '4, 120, 87', 800: '6, 95, 70', 900: '6, 78, 59', 950: '2, 44, 34' },
+                pink: { 50: '253, 242, 248', 100: '252, 231, 243', 400: '244, 114, 182', 500: '236, 72, 153', 600: '219, 39, 119', 700: '190, 24, 93', 800: '157, 23, 77', 900: '131, 24, 67', 950: '80, 7, 36' },
+                blue: { 50: '239, 246, 255', 100: '219, 234, 254', 400: '96, 165, 250', 500: '59, 130, 246', 600: '37, 99, 235', 700: '29, 78, 216', 800: '30, 64, 175', 900: '30, 58, 138', 950: '23, 37, 84' },
+                indigo: { 50: '238, 242, 255', 100: '224, 231, 255', 400: '129, 140, 248', 500: '99, 102, 241', 600: '79, 70, 229', 700: '67, 56, 202', 800: '55, 48, 163', 900: '49, 46, 129', 950: '30, 27, 75' },
+                lime: { 50: '247, 254, 231', 100: '236, 252, 203', 400: '163, 230, 53', 500: '132, 204, 22', 600: '101, 163, 13', 700: '77, 124, 15', 800: '63, 98, 18', 900: '54, 83, 20', 950: '20, 31, 11' },
+                orange: { 50: '255, 247, 237', 100: '255, 237, 213', 400: '251, 146, 60', 500: '249, 115, 22', 600: '234, 88, 12', 700: '194, 65, 12', 800: '154, 52, 18', 900: '124, 45, 18', 950: '67, 20, 7' },
+                rose: { 50: '255, 241, 242', 100: '255, 228, 230', 400: '251, 113, 133', 500: '244, 63, 94', 600: '225, 29, 72', 700: '190, 18, 60', 800: '159, 18, 57', 900: '136, 19, 55', 950: '76, 5, 25' },
+                violet: { 50: '245, 243, 255', 100: '237, 233, 254', 400: '167, 139, 250', 500: '139, 92, 246', 600: '124, 58, 237', 700: '109, 40, 217', 800: '91, 33, 182', 900: '76, 29, 149', 950: '46, 16, 101' },
+                yellow: { 50: '254, 252, 232', 100: '254, 249, 195', 400: '250, 204, 21', 500: '234, 179, 8', 600: '202, 138, 4', 700: '161, 98, 7', 800: '133, 77, 14', 900: '113, 63, 18', 950: '66, 32, 6' }
+            };
+            const root = document.documentElement;
+            const theme = themes[color] || themes.cyan;
+            Object.keys(theme).forEach(shade => {
+                root.style.setProperty(`--c-${shade}`, theme[shade]);
+            });
+        }
+
+        function renderQuickActions() {
+            const container = document.getElementById('quick-actions');
+            container.innerHTML = '';
+            quickTasks.forEach(task => {
+                const btn = document.createElement('button');
+                btn.className = "px-3 py-1 bg-cyan-950/40 border border-cyan-500/30 text-[9px] font-black text-cyan-400 uppercase tracking-widest skew-x-[-15deg] hover:bg-cyan-500 hover:text-black transition-all glow-box";
+                btn.innerText = task.label;
+                btn.onclick = () => executeQuickTask(task.prompt);
+                container.appendChild(btn);
+            });
+        }
+
+        function executeQuickTask(prompt) {
+            if (state.isLoading) return;
+            chatInput.value = prompt;
+            handleSend();
+        }
+
+        function renderHistory() {
+            historyList.innerHTML = '';
+            state.history.forEach(chat => {
+                const isActive = chat.id === state.currentChatId;
+                const div = document.createElement('div');
+                div.className = `group flex items-center justify-between p-3 rounded-none cursor-pointer transition-all text-xs uppercase tracking-tighter ${isActive ? 'bg-cyan-500/10 border-l-4 border-cyan-500 text-cyan-100' : 'hover:bg-cyan-950/30 text-cyan-700 hover:text-cyan-400'}`;
+                div.onclick = () => switchChat(chat.id);
+                
+                div.innerHTML = `
+                    <div class="flex items-center gap-3 truncate">
+                        <i data-lucide="cpu" class="w-4 h-4 ${isActive ? 'text-cyan-400' : 'text-cyan-900'}"></i>
+                        <span class="truncate font-bold">${chat.title}</span>
+                    </div>
+                    <button onclick="deleteChat(event, '${chat.id}')">
+                        <i data-lucide="trash-2" class="w-[14px] h-[14px] text-cyan-900 opacity-0 group-hover:opacity-100 hover:text-red-500"></i>
+                    </button>
+                `;
+                historyList.appendChild(div);
+            });
+            lucide.createIcons();
+        }
+
+        function renderMessages(animateLast = false, forceScroll = true) {
+            messageList.innerHTML = '';
+            const chat = state.history.find(h => h.id === state.currentChatId);
+            if (!chat) return;
+
+            // Hide quick actions once the first message is sent
+            const quickActions = document.getElementById('quick-actions');
+            if (chat.messages.length > 1) {
+                quickActions.classList.add('hidden');
+            } else {
+                quickActions.classList.remove('hidden');
+            }
+
+            chat.messages.forEach((msg, idx) => {
+                const isUser = msg.role === 'user';
+                const isLast = idx === chat.messages.length - 1;
+                const div = document.createElement('div');
+                div.className = `flex gap-4 ${isUser ? 'flex-row-reverse' : 'flex-row'}`;
+                
+                const ttsButton = !isUser ? `
+                    <div class="mt-3 flex justify-end border-t border-cyan-900/30 pt-2">
+                        <button onclick="speakText(this.closest('.message-bubble').querySelector('.message-content').innerText)" class="flex items-center gap-1.5 text-[9px] font-black text-cyan-600 hover:text-cyan-400 transition-all uppercase tracking-widest">
+                            <i data-lucide="volume-2" class="w-3 h-3"></i> Audio_Output
+                        </button>
+                    </div>
+                ` : '';
+
+                let contentHtml = msg.content;
+                if (animateLast && !isUser && isLast) {
+                    let charCount = 0;
+                    contentHtml = msg.content.split(/(\s+)/).map(part => {
+                        const start = charCount;
+                        charCount += part.length;
+                        if (!part.trim()) return part;
+                        return `<span class="word-reveal opacity-0 translate-y-1 inline-block" data-start="${start}">${part}</span>`;
+                    }).join('');
+                }
+
+                div.innerHTML = `
+                    <div class="flex-shrink-0 w-10 h-10 rounded-none border border-cyan-500/50 flex items-center justify-center ${isUser ? 'bg-cyan-600 text-black' : 'bg-black text-cyan-400'}">
+                        <i data-lucide="${isUser ? 'user' : 'bot'}" class="w-5 h-5"></i>
+                    </div>
+                    <div class="message-bubble max-w-[90%] md:max-w-[85%] p-3 md:p-4 ${isUser ? 'bg-cyan-950/20 text-cyan-100 border-l-2 border-cyan-500' : 'bg-black/40 border border-cyan-900/50 text-cyan-100'} shadow-lg ${!isUser && state.animeMode && !animateLast ? 'glitch-reveal ring-1 ring-cyan-500/30' : ''}">
+                        <p class="text-[10px] font-black uppercase ${state.animeMode && !isUser ? 'text-pink-500' : 'text-cyan-700'} mb-1 tracking-widest">
+                            ${isUser ? state.userName : state.aiName}
+                        </p>
+                        <p class="message-content leading-relaxed whitespace-pre-wrap text-sm md:text-base tracking-tight">${contentHtml}</p>
+                        ${ttsButton}
+                    </div>
+                `;
+                messageList.appendChild(div);
+            });
+            lucide.createIcons();
+            if (forceScroll) scrollToBottom();
+        }
+
+        function playSystemSound() {
+            if (!state.animeMode) return;
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.type = 'square';
+            oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.1);
+            gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.1);
+        }
+
+        function stopSpeaking() {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                document.getElementById('stop-voice-btn').classList.add('hidden');
+            }
+        }
+
+        function speakText(text, onEnd) {
+            if (!('speechSynthesis' in window)) return onEnd?.();
+
+            window.speechSynthesis.cancel();
+            
+            const stopBtn = document.getElementById('stop-voice-btn');
+            const status = document.getElementById('call-status');
+            
+            const utterance = new SpeechSynthesisUtterance(text);
+            activeUtterance = utterance;
+            
+            utterance.pitch = state.animeMode ? 1.2 : 0.85;
+            utterance.rate = state.talkSpeed;
+
+            let voices = window.speechSynthesis.getVoices();
+            if (voices.length > 0) {
+                utterance.voice = voices.find(v => v.lang.startsWith('en') && v.name.includes('Google')) || 
+                                   voices.find(v => v.lang.startsWith('en')) || 
+                                   voices[0];
+            }
+            
+            utterance.onstart = () => {
+                if (stopBtn) stopBtn.classList.remove('hidden');
+                if (state.isCallActive && status) {
+                    status.innerText = "Transmitting...";
+                    callThinkingAnimation.classList.add('hidden');
+                    document.getElementById('call-pulse').style.animationPlayState = 'running';
+                }
+            };
+            
+            const handleEnd = () => {
+                activeUtterance = null;
+                if (stopBtn) stopBtn.classList.add('hidden');
+                if (state.isCallActive && status) {
+                    status.innerText = state.isMuted ? "Muted" : "Listening...";
+                    document.getElementById('call-pulse').style.animationPlayState = 'paused';
+                }
+                onEnd?.();
+            };
+
+            utterance.onend = handleEnd;
+            utterance.onerror = handleEnd;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function updateMuteUI() {
+            const icon = document.getElementById('mute-icon');
+            const label = document.getElementById('mute-label');
+            const container = document.getElementById('mute-icon-container');
+            
+            if (state.isMuted) {
+                icon.setAttribute('data-lucide', 'mic-off');
+                label.innerText = 'Unmute';
+                container.classList.add('bg-red-950/40', 'border-red-500', 'text-red-500');
+                container.classList.remove('bg-cyan-900/40', 'border-cyan-500', 'text-cyan-400');
+                if (isRecognitionActive) recognition.stop();
+                document.getElementById('call-status').innerText = "Muted";
+            } else {
+                icon.setAttribute('data-lucide', 'mic');
+                label.innerText = 'Mute';
+                container.classList.remove('bg-red-950/40', 'border-red-500', 'text-red-500');
+                container.classList.add('bg-cyan-900/40', 'border-cyan-500', 'text-cyan-400');
+                if (state.isCallActive) {
+                    callThinkingAnimation.classList.add('hidden'); // Hide thinking animation when listening
+                    document.getElementById('call-status').innerText = "Listening...";
+                    safeStartRecognition();
+                }
+            }
+            lucide.createIcons();
+        }
+
+        function toggleMute() {
+            state.isMuted = !state.isMuted;
+            updateMuteUI();
+        }
+
+        async function toggleVoiceInput() {
+            if (!recognition) return alert("Speech recognition not supported.");
+            
+            const success = await initAudioSystem();
+            if (!success) return alert("Microphone access denied or protocol restricted.");
+
+            if (isVoiceInputActive) {
+                recognition.stop();
+            } else {
+                isVoiceInputActive = true;
+                updateVoiceInputUI();
+                startVisualizer('mic-test-visualizer'); // Re-use diagnostic canvas for feedback
+                recognition.start();
+            }
+        }
+
+        function updateVoiceInputUI() {
+            const btn = document.getElementById('voice-input-btn');
+            if (isVoiceInputActive) {
+                btn.classList.add('bg-cyan-500', 'text-black', 'glow-box');
+            } else {
+                btn.classList.remove('bg-cyan-500', 'text-black', 'glow-box');
+            }
+        }
+
+        async function toggleCallMode() {
+            if (!recognition) {
+                alert("Speech recognition is not supported in this browser.");
+                return;
+            }
+            
+            await initAudioSystem();
+            state.isCallActive = !state.isCallActive;
+            const overlay = document.getElementById('call-overlay');
+            overlay.classList.toggle('hidden', !state.isCallActive);
+            
+            if (state.isCallActive) {
+                state.isMuted = false;
+                // Set initial visual state for the mute button
+                const icon = document.getElementById('mute-icon');
+                const label = document.getElementById('mute-label');
+                const container = document.getElementById('mute-icon-container');
+                icon.setAttribute('data-lucide', 'mic');
+                label.innerText = 'Mute';
+                container.classList.remove('bg-red-950/40', 'border-red-500', 'text-red-500');
+                container.classList.add('bg-cyan-900/40', 'border-cyan-500', 'text-cyan-400');
+                lucide.createIcons();
+
+                callThinkingAnimation.classList.add('hidden'); // Ensure hidden on call start
+                startVisualizer('call-visualizer');
+
+                // Trigger AI Introduction before starting the microphone
+                const introMsg = `Nebula protocol active. I am ${state.aiName}. Standing by for your voice commands, ${state.userName}.`;
+                speakText(introMsg, () => {
+                    // Only start listening if the user hasn't closed the call mode during intro
+                    if (state.isCallActive) updateMuteUI();
+                });
+            } else {
+                stopVisualizer();
+                recognition.stop();
+                window.speechSynthesis.cancel();
+            }
+        }
+
+        function toggleMicTest() {
+            const btn = document.getElementById('mic-test-btn');
+            if (btn.innerText === 'Start_Test') {
+                btn.innerText = 'Stop_Test';
+                btn.classList.replace('bg-cyan-600', 'bg-red-600');
+                startVisualizer('mic-test-visualizer');
+            } else {
+                btn.innerText = 'Start_Test';
+                btn.classList.replace('bg-red-600', 'bg-cyan-600');
+                stopVisualizer();
+                const canvas = document.getElementById('mic-test-visualizer');
+                canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+
+        function scrollToBottom() {
+            const container = document.getElementById('message-container');
+            container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+        }
+
+        function createNewChat() {
+            const id = Date.now().toString();
+            const welcomeMsg = `Hello! I'm ${state.aiName}. Ready for a new topic?`;
+            
+            // Prime speech engine for browser security policies
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+            }
+
+            state.history.unshift({
+                id: id,
+                title: 'New Chat',
+                messages: [{ role: 'assistant', content: welcomeMsg }]
+            });
+            state.currentChatId = id;
+            saveStateToStorage();
+            renderHistory();
+            renderMessages(true);
+
+            // Trigger the word-reveal animation for the greeting
+            const lastBubble = messageList.lastElementChild;
+            if (lastBubble) {
+                const spans = lastBubble.querySelectorAll('.word-reveal');
+                let currentWord = 0;
+                const interval = setInterval(() => {
+                    if (currentWord >= spans.length) {
+                        clearInterval(interval);
+                        return;
+                    }
+                    spans[currentWord].classList.remove('opacity-0', 'translate-y-1');
+                    spans[currentWord].classList.add('opacity-100', 'translate-y-0');
+                    currentWord++;
+                }, state.textSpeed);
+            }
+
+            // Proactively speak the greeting
+            speakText(welcomeMsg);
+
+            if (window.innerWidth < 768 || state.mobileMode) toggleSidebar();
+        }
+
+        function switchChat(id) {
+            state.currentChatId = id;
+            saveStateToStorage();
+            const chat = state.history.find(h => h.id === id);
+            renderHistory();
+            renderMessages();
+            if (window.innerWidth < 768 || state.mobileMode) toggleSidebar();
+        }
+
+        function deleteChat(e, id) {
+            e.stopPropagation();
+            state.history = state.history.filter(h => h.id !== id);
+            if (state.history.length === 0) {
+                createNewChat();
+            } else if (state.currentChatId === id) {
+                switchChat(state.history[0].id);
+            } else {
+                renderHistory();
+            }
+            saveStateToStorage();
+        }
+
+        async function handleSend(voiceText = null) {
+            const text = voiceText || chatInput.value.trim();
+            if (!text) return;
+            if (state.isLoading) return;
+
+            state.isLoading = true; // Set lock immediately
+
+            const chat = state.history.find(h => h.id === state.currentChatId);
+            
+            // Prime speech engine on user interaction to satisfy browser security
+            if ('speechSynthesis' in window && !window.speechSynthesis.speaking) {
+                window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+            }
+
+            chat.messages.push({ role: 'user', content: text });
+            chatInput.value = '';
+            saveStateToStorage();
+            renderMessages();
+
+            // Add Loading indicator
+            const loadingDiv = document.createElement('div');
+            loadingDiv.id = 'loading-bubble';
+            loadingDiv.className = 'flex gap-4';
+            loadingDiv.innerHTML = `
+                <div class="flex-shrink-0 w-10 h-10 border border-cyan-500/50 bg-black flex items-center justify-center text-cyan-400">
+                    <i data-lucide="bot" class="w-5 h-5"></i>
+                </div>
+                <div class="bg-cyan-950/10 border border-cyan-900 p-4 flex items-center gap-3">
+                    <div class="animate-spin w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full"></div>
+                    <span class="text-[10px] font-black text-cyan-600 uppercase tracking-widest">Processing_Data...</span>
+                </div>
+            `;
+            messageList.appendChild(loadingDiv);
+            lucide.createIcons();
+
+            try {
+                const response = await callGroqAI(chat.messages);
+                const loadingBubble = document.getElementById('loading-bubble');
+                if (loadingBubble) loadingBubble.remove();
+                
+                chat.messages.push({ role: 'assistant', content: response });
+                if (chat.title === 'New Chat') chat.title = text.substring(0, 20) + (text.length > 20 ? '...' : '');
+                saveStateToStorage();
+                
+                playSystemSound();
+                renderMessages(true);
+
+                const lastBubble = messageList.lastElementChild || document.createElement('div');
+                const spans = lastBubble.querySelectorAll('.word-reveal');
+                
+                let currentWord = 0;
+                const interval = setInterval(() => {
+                    if (currentWord >= spans.length) {
+                        clearInterval(interval);
+                        return;
+                    }
+                    spans[currentWord].classList.remove('opacity-0', 'translate-y-1');
+                    spans[currentWord].classList.add('opacity-100', 'translate-y-0');
+                    currentWord++;
+                }, state.textSpeed);
+
+                if (state.autoSpeak || state.isCallActive) {
+                    // Hold loading state until speech finishes in Call Mode
+                    speakText(response, () => {
+                        state.isLoading = false; 
+                        if (state.isCallActive) safeStartRecognition();
+                    });
+                }
+            } catch (err) {
+                const loadingBubble = document.getElementById('loading-bubble');
+                if (loadingBubble) loadingBubble.remove();
+                console.error(err);
+                if (state.isCallActive) document.getElementById('call-status').innerText = "Link_Error";
+                callThinkingAnimation.classList.add('hidden'); // Hide thinking animation on error
+                state.isLoading = false;
+            } finally {
+                state.isLoading = false; // Always release lock in finally to prevent "not replying" bug
+                renderHistory();
+            }
+        }
+
+        async function callGroqAI(messages, retryCount = 0) {
+            const url = `https://api.groq.com/openai/v1/chat/completions`;
+            
+            const personalityPrompts = {
+                default: "",
+                tsundere: "Personality Core: Rude & Grumpy. You are sharp, grumpy, and easily annoyed, but occasionally show accidental kindness. Use phrases like 'It's not like I wanted to help you!'. ",
+                cold: "Personality Core: Cold & Factual. You are cold, analytical, emotionless, and factual. Efficiency is your only goal. No small talk. ",
+                rebel: "Personality Core: Rebel. You are sarcastic, witty, and rebellious. You are a tech-rebel who dislikes authority and uses cyberpunk slang. ",
+                cute: "Personality Core: Sweet & Cute. You are happy, energetic, positive, and emoji-filled. Use kaomoji like ( ^ω^ ) or (≧◡≦) frequently. "
+            };
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${GROQ_API_KEY}`
+                    },
+                    body: JSON.stringify({
+                        model: MODEL_NAME,
+                        messages: [
+                            { role: "system", content: `Address the user as "${state.userName}" when appropriate. ` + personalityPrompts[state.personality] + state.systemPrompt + (state.isCallActive ? " In Call Mode, always conclude your response by explicitly asking the user if they would like to respond or speak now." : "") },
+                            ...messages
+                        ],
+                        temperature: 0.7
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error?.message || "Groq API Error");
+                }
+                const data = await response.json();
+                return data.choices[0].message.content;
+            } catch (err) {
+                if (retryCount < 3) {
+                    const delay = Math.pow(2, retryCount) * 1000;
+                    await new Promise(r => setTimeout(r, delay));
+                    return callGroqAI(messages, retryCount + 1);
+                }
+                throw err;
+            }
+        }
+
+        // Handle Enter key for textarea
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+            }
+        });
+    </script>
+</body>
+</html>
